@@ -1,8 +1,7 @@
 % This is the script file for motion-error-free 3D reconstruction according to the Binomial Self-compensation (BSC) technique. 
 % Line 12: Switch between different sets of data
-% Line 46: Switch between I-BSC and P-BSC
 % Author: Geyou Zhang, University of Electronic Science and Technology of
-% China, 2025/02/27
+% China, 2025/11/22
 clc; clear all; close all;
 %% Parameters Setting
 addpath('./Package/');
@@ -36,71 +35,61 @@ end
 %% Binomial Self-Compensation VS Traditional Four-step phase shifting for Dynamic 3D Scanning
 % The computation speed can be accelerated by setting a larger number of workers in the MATLAB parallel pool
 fig = figure;
-set(gcf, 'Position', [0 0 1100 1000]); %tiledlayout(2, 2, 'TileSpacing', 'none', 'Padding', 'none');
+set(gcf, 'Position', [0 0 1500 600]); %tiledlayout(2, 2, 'TileSpacing', 'none', 'Padding', 'none');
 for i = 1:iFrameTotal - iImageNum + 1
-    %% 3D reconstruction with our P-BSC/I-BSC
-    % Binomial Self-Compemsation for High Frequency Wrapped Phase
-    tic
-    % Test PBSC
-%     [ mPhaseWrapLeft, mBcLeft ] = Func_PBSC( vmIL(:, :, i:i+ iImageNum - 1), iBcThresh );
-%     [ mPhaseWrapRight, mBcRight ] = Func_PBSC( vmIR(:, :, i:i+ iImageNum - 1), iBcThresh );
-    % Test IBSC
-    [ mPhaseWrapLeft, mBcLeft ] = Func_IBSC( vmIL(:, :, i:i+ iImageNum - 1), iBcThresh );
-    [ mPhaseWrapRight, mBcRight ] = Func_IBSC( vmIR(:, :, i:i+ iImageNum - 1), iBcThresh );
-    dT1 = toc;
-    % Correct Inherent Phase Shift
-    dOffset = pi/2*mod(i - 1,4);
-    mPhaseWrapLeft = mod(mPhaseWrapLeft + dOffset,2*pi);
-    mPhaseWrapRight = mod(mPhaseWrapRight + dOffset,2*pi);
-    
-    % Paraxial Stereo Phase Unwarpping and 3D Reconstruction
-    tic
-    [ mX, mY, mZ, mXRaw, mYRaw, mZRaw, mPhase] = Func_Compute3D_PSPU( mPhaseWrapLeft, mPhaseWrapRight, mDispMin, mDispMax, mCamera1Rectified, mCamera2Rectified, mProjector, FSet, 0 );
-    dT2 = toc;
-
-    % Remove the Outliers
-    mInvalid = isnan( mZ ); mZ( mInvalid ) = 0; mZFilted = medfilt2( mZ, [9,9]); mOutlier = abs(mZ - mZFilted) > 2; mZ( mOutlier|mInvalid ) = nan;
     %% 3D reconstruction with traditional four-step phase shifting
-    tic
-    [ mPhaseWrapLeftFourStep, mBcLeftFourStep ] = Func_PBSC( vmIL(:, :, i:i + 3), iBcThresh );
-    [ mPhaseWrapRightFourStep, mBcRightFourStep ] = Func_PBSC( vmIR(:, :, i:i + 3), iBcThresh );
-    dT3 = toc;
-    
+    [ mPhaseWrapLeftFourStep ] = Func_PBSC( vmIL(:, :, i:i + 3), iBcThresh );
+    [ mPhaseWrapRightFourStep ] = Func_PBSC( vmIR(:, :, i:i + 3), iBcThresh );
     % Correct Inherent Phase Shift
     dOffset = pi/2*mod(i - 1,4);
     mPhaseWrapLeftFourStep = mod(mPhaseWrapLeftFourStep + dOffset,2*pi);
-    mPhaseWrapRightFourStep = mod(mPhaseWrapRightFourStep + dOffset,2*pi);
-    
+    mPhaseWrapRightFourStep = mod(mPhaseWrapRightFourStep + dOffset,2*pi);    
     % Stereo Phase Unwarpping and 3D Reconstruction
-    tic
-    [ mXFourStep, mYFourStep, mZFourStep, mXFourStepRaw, mYFourStepRaw, mZFourStepRaw, mPhaseFourStep] = Func_Compute3D_PSPU( mPhaseWrapLeftFourStep, mPhaseWrapRightFourStep, mDispMin, mDispMax, mCamera1Rectified, mCamera2Rectified, mProjector, FSet, 0 );
-    dT4 = toc;
-    disp(['Frame no.',num2str(i), '-----------------------------------------------------------------------------------------------------------']);
-    disp(['BSC takes ', num2str(dT1), 's', ', PSPU and 3D reconstruction take ', num2str(dT2), 's']);
-    disp(['Traditional four-step takes ', num2str(dT3), 's', ', PSPU and 3D reconstruction take ', num2str(dT4), 's']);
-    
+    [ mXFourStep, mYFourStep, mZFourStep] = Func_Compute3D_PSPU( mPhaseWrapLeftFourStep, mPhaseWrapRightFourStep, mDispMin, mDispMax, mCamera1Rectified, mCamera2Rectified, mProjector, FSet, 0 );
     % Remove the Outliers
-    mInvalid = isnan( mZFourStep ); mZFourStep( mInvalid ) = 0; mZFilted = medfilt2( mZFourStep, [9,9]); mOutlier = abs(mZFourStep - mZFilted) > 2; mZFourStep( mOutlier|mInvalid ) = nan;
+    [ mZFourStep ] = Func_FiltZOutlier( mZFourStep, 9, 2 );   
+    %% 3D reconstruction with P-BSC
+    % Test PBSC
+    [ mPhaseWrapLeft_PBSC ] = Func_PBSC( vmIL(:, :, i:i + iImageNum - 1), iBcThresh );
+    [ mPhaseWrapRight_PBSC ] = Func_PBSC( vmIR(:, :, i:i + iImageNum - 1), iBcThresh );
+    % Correct Inherent Phase Shift
+    dOffset = pi/2*mod(i - 1,4);
+    mPhaseWrapLeft_PBSC = mod(mPhaseWrapLeft_PBSC + dOffset,2*pi);
+    mPhaseWrapRight_PBSC = mod(mPhaseWrapRight_PBSC + dOffset,2*pi);
+    % Paraxial Stereo Phase Unwarpping and 3D Reconstruction
+    [ mX_PBSC, mY_PBSC, mZ_PBSC ] = Func_Compute3D_PSPU( mPhaseWrapLeft_PBSC, mPhaseWrapRight_PBSC, mDispMin, mDispMax, mCamera1Rectified, mCamera2Rectified, mProjector, FSet, 0 );
+    % Remove the Outliers
+    [ mZ_PBSC ] = Func_FiltZOutlier( mZ_PBSC, 9, 2 );   
+    %% 3D reconstruction with I-BSC
+    % Test IBSC
+    [ mPhaseWrapLeft_IBSC ] = Func_IBSC( vmIL(:, :, i:i+ iImageNum - 1), iBcThresh );
+    [ mPhaseWrapRight_IBSC ] = Func_IBSC( vmIR(:, :, i:i+ iImageNum - 1), iBcThresh );
+    % Correct Inherent Phase Shift
+    dOffset = pi/2*mod(i - 1,4);
+    mPhaseWrapLeft_IBSC = mod(mPhaseWrapLeft_IBSC + dOffset,2*pi);
+    mPhaseWrapRight_IBSC = mod(mPhaseWrapRight_IBSC + dOffset,2*pi);    
+    % Paraxial Stereo Phase Unwarpping and 3D Reconstruction
+    [ mX_IBSC, mY_IBSC, mZ_IBSC ] = Func_Compute3D_PSPU( mPhaseWrapLeft_IBSC, mPhaseWrapRight_IBSC, mDispMin, mDispMax, mCamera1Rectified, mCamera2Rectified, mProjector, FSet, 0 );
+    % Remove the Outliers
+    [ mZ_IBSC ] = Func_FiltZOutlier( mZ_IBSC, 9, 2 );      
     
+    %% Draw the point clouds   
+    disp(['Frame no.',num2str(i), '-----------------------------------------------------------------------------------------------------------']);       
     % Compute the depth range for visualization
     mu = mean( mZFourStep(:), 'omitnan' ); sigma = std( mZFourStep(:), 'omitnan' ); CMin = mu - 2*sigma; CMax = mu + 2*sigma;
-   
-    %% Draw the point clouds
-    subplot(221);
-    pcshow( [mXRaw(:),mYRaw(:),mZRaw(:)] ); axis image; zlim([Zmin, Zmax]); xlim([-100, 40]); ylim([-120, 20]); 
-    view([0 -90]);colormap(jet); title('BSC w/o PSPU', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]);     
-    
-    subplot(222);
-    pcshow( [mX(:),mY(:),mZ(:)] ); axis image; zlim([Zmin, Zmax]); xlim([-100, 40]); ylim([-120, 20]); 
-    view([0 -90]);colormap(jet); title('BSC w/ PSPU (Ours)', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]);    
-    
-    subplot(223);
-    pcshow( [mXFourStepRaw(:),mYFourStepRaw(:),mZFourStepRaw(:)] ); axis image; zlim([Zmin, Zmax]); xlim([-100, 40]); ylim([-120, 20]); 
-    view([0 -90]); colormap(jet);title('Traditional four-step w/o PSPU', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]); 
-    
-    subplot(224);
+      
+    sgtitle(['Frame no.',num2str(i)], 'FontSize', 20, 'FontWeight', 'bold', 'Color',[1,1,1]);
+    subplot(131);
     pcshow( [mXFourStep(:),mYFourStep(:),mZFourStep(:)] ); axis image; zlim([Zmin, Zmax]); xlim([-100, 40]); ylim([-120, 20]); 
-    view([0 -90]); colormap(jet);title('Traditional four-step w/ PSPU', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]); 
+    view([0 -90]); colormap(jet);title('Traditional four-step', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]); 
+    
+    subplot(132);
+    pcshow( [mX_PBSC(:),mY_PBSC(:),mZ_PBSC(:)] ); axis image; zlim([Zmin, Zmax]); xlim([-100, 40]); ylim([-120, 20]); 
+    view([0 -90]);colormap(jet); title('P-BSC', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]);    
+    
+    subplot(133);
+    pcshow( [mX_IBSC(:),mY_IBSC(:),mZ_IBSC(:)] ); axis image; zlim([Zmin, Zmax]); xlim([-100, 40]); ylim([-120, 20]); 
+    view([0 -90]);colormap(jet); title('I-BSC', 'FontSize', 20, 'FontWeight', 'bold'); caxis([CMin, CMax]);    
     
     h = axes(fig,'visible','off'); 
     cb = colorbar(h,'Position',[0.92 0.168 0.016 0.7], 'FontSize', 20, 'FontWeight', 'bold'); 
